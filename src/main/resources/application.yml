@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    url: jdbc:sqlite:knowledge_base.db
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+      location: ${java.io.tmpdir}
+
+file:
+  upload-dir: d:/upload
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/*.xml 

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库管理系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css" />
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .upload-demo {
+            margin-bottom: 20px;
+        }
+        .preview-dialog {
+            width: 80%;
+            max-width: 1000px;
+        }
+        .preview-content {
+            min-height: 400px;
+            max-height: 600px;
+            overflow: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+        .preview-image {
+            max-width: 100%;
+            height: auto;
+        }
+        .preview-pdf {
+            width: 100%;
+            height: 600px;
+        }
+        .preview-html {
+            width: 100%;
+            height: 600px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="header">
+            <h2>知识库管理系统</h2>
+            <el-button type="primary" @click="showUploadDialog">上传文件</el-button>
+        </div>
+
+        <el-table :data="knowledgeList" style="width: 100%">
+            <el-table-column prop="title" label="标题"></el-table-column>
+            <el-table-column prop="description" label="描述"></el-table-column>
+            <el-table-column prop="fileName" label="文件名"></el-table-column>
+            <el-table-column prop="fileSize" label="文件大小">
+                <template #default="scope">
+                    {{ formatFileSize(scope.row.fileSize) }}
+                </template>
+            </el-table-column>
+            <el-table-column prop="createTime" label="创建时间">
+                <template #default="scope">
+                    {{ formatDate(scope.row.createTime) }}
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" width="250">
+                <template #default="scope">
+                    <el-button size="small" @click="previewFile(scope.row)">预览</el-button>
+                    <el-button size="small" @click="downloadFile(scope.row)">下载</el-button>
+                    <el-button size="small" type="danger" @click="deleteFile(scope.row)">删除</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+
+        <el-dialog v-model="uploadDialogVisible" title="上传文件">
+            <el-form :model="uploadForm" label-width="80px">
+                <el-form-item label="标题">
+                    <el-input v-model="uploadForm.title"></el-input>
+                </el-form-item>
+                <el-form-item label="描述">
+                    <el-input type="textarea" v-model="uploadForm.description"></el-input>
+                </el-form-item>
+                <el-form-item label="文件">
+                    <el-upload
+                        class="upload-demo"
+                        action="#"
+                        :auto-upload="false"
+                        :on-change="handleFileChange">
+                        <el-button type="primary">选择文件</el-button>
+                    </el-upload>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="uploadDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="uploadFile">上传</el-button>
+                </span>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="previewDialogVisible" :title="'预览: ' + (currentFile?.fileName || '')" custom-class="preview-dialog">
+            <div v-if="previewData">
+                <div v-if="previewData.type === 'text'" class="preview-content">
+                    <pre>{{ previewData.content }}</pre>
+                </div>
+                
+                <div v-else-if="currentFile?.fileType?.startsWith('image/')" class="preview-content">
+                    <img :src="previewUrl" class="preview-image" />
+                </div>
+                
+                <div v-else-if="currentFile?.fileType === 'application/pdf'" class="preview-content">
+                    <iframe :src="previewUrl" class="preview-pdf"></iframe>
+                </div>
+                
+                <div v-else-if="previewData.type === 'html'" class="preview-content">
+                    <iframe :srcdoc="previewData.content" class="preview-html"></iframe>
+                </div>
+                
+                <div v-else class="preview-content">
+                    <el-alert
+                        title="不支持预览该类型的文件"
+                        type="warning"
+                        :closable="false">
+                    </el-alert>
+                </div>
+            </div>
+        </el-dialog>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+        const { ElMessage, ElMessageBox } = ElementPlus;
+        
+        const app = createApp({
+            setup() {
+                const knowledgeList = ref([]);
+                const uploadDialogVisible = ref(false);
+                const previewDialogVisible = ref(false);
+                const previewData = ref(null);
+                const currentFile = ref(null);
+                const previewUrl = ref('');
+                const uploadForm = ref({
+                    title: '',
+                    description: '',
+                    file: null
+                });
+
+                const loadKnowledgeList = async () => {
+                    try {
+                        const response = await axios.get('/api/knowledge-base');
+                        knowledgeList.value = response.data;
+                    } catch (error) {
+                        ElMessage.error('加载列表失败');
+                    }
+                };
+
+                const showUploadDialog = () => {
+                    uploadForm.value = {
+                        title: '',
+                        description: '',
+                        file: null
+                    };
+                    uploadDialogVisible.value = true;
+                };
+
+                const handleFileChange = (file) => {
+                    uploadForm.value.file = file.raw;
+                };
+
+                const uploadFile = async () => {
+                    if (!uploadForm.value.file) {
+                        ElMessage.warning('请选择文件');
+                        return;
+                    }
+
+                    if (!uploadForm.value.title) {
+                        ElMessage.warning('请输入标题');
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('file', uploadForm.value.file);
+                    formData.append('knowledgeBase', JSON.stringify({
+                        title: uploadForm.value.title,
+                        description: uploadForm.value.description || ''
+                    }));
+
+                    try {
+                        await axios.post('/api/knowledge-base', formData, {
+                            headers: {
+                                'Content-Type': 'multipart/form-data'
+                            }
+                        });
+                        ElMessage.success('上传成功');
+                        uploadDialogVisible.value = false;
+                        loadKnowledgeList();
+                    } catch (error) {
+                        console.error('Upload error:', error);
+                        const errorMessage = error.response?.data?.message || error.message;
+                        ElMessage.error('上传失败: ' + errorMessage);
+                    }
+                };
+
+                const previewFile = async (file) => {
+                    try {
+                        currentFile.value = file;
+                        const response = await axios.get(`/api/knowledge-base/${file.id}/preview`, {
+                            responseType: file.fileType.startsWith('image/') || file.fileType === 'application/pdf' ? 'blob' : 'json'
+                        });
+
+                        if (file.fileType.startsWith('image/') || file.fileType === 'application/pdf') {
+                            previewUrl.value = URL.createObjectURL(response.data);
+                            previewData.value = { type: file.fileType.startsWith('image/') ? 'image' : 'pdf' };
+                        } else {
+                            previewData.value = response.data;
+                        }
+
+                        previewDialogVisible.value = true;
+                    } catch (error) {
+                        ElMessage.error('预览失败');
+                    }
+                };
+
+                const downloadFile = async (row) => {
+                    try {
+                        const response = await axios.get(`/api/knowledge-base/${row.id}/download`, {
+                            responseType: 'blob'
+                        });
+                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', row.fileName);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch (error) {
+                        ElMessage.error('下载失败');
+                    }
+                };
+
+                const deleteFile = async (row) => {
+                    try {
+                        await ElMessageBox.confirm('确定要删除这个文件吗？', '提示', {
+                            type: 'warning'
+                        });
+                        await axios.delete(`/api/knowledge-base/${row.id}`);
+                        ElMessage.success('删除成功');
+                        loadKnowledgeList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            ElMessage.error('删除失败');
+                        }
+                    }
+                };
+
+                const formatFileSize = (size) => {
+                    if (size < 1024) return size + ' B';
+                    if (size < 1024 * 1024) return (size / 1024).toFixed(2) + ' KB';
+                    if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(2) + ' MB';
+                    return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                };
+
+                const formatDate = (date) => {
+                    return new Date(date).toLocaleString();
+                };
+
+                loadKnowledgeList();
+
+                return {
+                    knowledgeList,
+                    uploadDialogVisible,
+                    previewDialogVisible,
+                    previewData,
+                    currentFile,
+                    previewUrl,
+                    uploadForm,
+                    showUploadDialog,
+                    handleFileChange,
+                    uploadFile,
+                    previewFile,
+                    downloadFile,
+                    deleteFile,
+                    formatFileSize,
+                    formatDate
+                };
+            }
+        });
+
+        app.use(ElementPlus);
+        app.mount('#app');
+    </script>
+</body>
+</html> 
