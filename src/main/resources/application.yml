@@ -4,7 +4,7 @@ server:
 spring:
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:knowledge_base.db
+    url: jdbc:sqlite:/app/data/knowledge_base.db
   servlet:
     multipart:
       max-file-size: 100MB
@@ -12,9 +12,9 @@ spring:
       location: ${java.io.tmpdir}
 
 file:
-  upload-dir: d:/upload
+  upload-dir: /app/data/uploads
 
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
-  mapper-locations: classpath:mapper/*.xml 
+  mapper-locations: classpath:mapper/*.xml
